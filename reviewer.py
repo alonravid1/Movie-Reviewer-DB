@@ -37,45 +37,54 @@ def check_rating(cursor):
     return (('rating', ) in result)
 
 
-def create_reviewer_table(cursor):
+def create_reviewer_table(cnx, cursor):
     """
     create the reviewer table
     """
+
     cursor.execute("""
     CREATE TABLE reviewer (
-        reviewer_id INT NOT NULL,
+        reviewer_id INT NOT NULL PRIMARY KEY,
         first_name VARCHAR(45) NOT NULL,
-        last_name VARCHAR(45) NOT NULL,
-        PRIMARY KEY(reviewer_id)
-    )
+        last_name VARCHAR(45) NOT NULL
+    );
     """)
+    #cnx.commit()
 
-def create_rating_table(cursor):
+
+def create_rating_table(cnx, cursor):
     """
     create the review table
     """
     cursor.execute("""
-    CREATE TABLE rating(
-        film_id SMALLINT NOT NULL,
-        reviewer_id INT NOT NULL,
-        rating DECIMAL(2,1) NOT NULL,
-        FOREIGN KEY(film_id) REFERENCES film(film_id),
-        FOREIGN KEY(reviewer_id) REFERENCES reviewer(reviewer_id),
-        CHECK (rating >=0 AND rating < 10)
-    )
-    """)
-
-def create_reviewer(cursor, id):
+        CREATE TABLE rating (
+            film_id SMALLINT NOT NULL,
+            reviewer_id INT NOT NULL,
+            rating DECIMAL(2,1) NOT NULL,
+            FOREIGN KEY(film_id)
+                REFERENCES film (film_id),
+            FOREIGN KEY (reviewer_id)
+                REFERENCES reviewer (reviewer_id),
+            CHECK (rating >= 0 AND rating < 10)
+        );
+        """)
+    #cnx.commit()
+    print("blah")
+    
+def create_reviewer(cnx, cursor, id):
     """
     creates a new reviewer using the
     input id, and asking for first and
     last names.
     """
-    first_name, last_name = input("Enter first and last name").split()
-    cursor.execute("""
+    first_name, last_name = input("Enter first and last name: ").split(' ')
+
+    insert_reviewer ="""
         INSERT INTO reviewer
-        VALUES {}, '{}', '{}'
-        """.format(id, first_name, last_name))
+        VALUES (%s, %s, %s);
+        """
+    cursor.execute(insert_reviewer, [id, first_name, last_name])
+    cnx.commit()
 
 def add_review(cursor, film_id):
     pass
@@ -88,71 +97,82 @@ def get_film_id(cursor):
     cursor.execute("""
         SELECT title, film_id, release_year
         FROM film
-        WHERE title = '{}'
-        """.format(film))
+        WHERE title = %s;
+        """,[film])
     result = cursor.fetchall()
 
-    while(len(result) == 0):
-        film = input("No such film exists, please enter a new film name: ")
-        cursor.execute("""
-            SELECT title, film_id, release_year
-            FROM film
-            WHERE title = '{}'
-             """.format(film))
-        result = cursor.fetchall()
+    while(True):
+        #runs until it the user enters a valid input
+        if(len(result) == 0):
+            film = input("No such film exists, please enter a new film name: ")
+            cursor.execute("""
+                SELECT title, film_id, release_year
+                FROM film
+                WHERE title = %s;
+                """,[film])
+            result = cursor.fetchall()
+
+        elif(len(result) == 1):
+            return result[0][0]
+
+        else:
+            print("Please select a film based on its ID from the following list:")
+            print(result)
+            film_id = input()
+            for movie in result:
+                if(movie[0] == film_id):
+                    return film_id
+            result = [] #sets result's length to 0
         
-    if(len(result) == 1):
-        return result[0][0]
-    else:
-        print("Please select a film based on it's id from the following list:")
-        print(result)
-        film = input()
-        for movie in result:
-            if(movie[0] == film):
-               return film
-       
-def check_id(cursor,id):
+
+def check_id(cnx, cursor, id):
     """
     check if the given ID exists in the
     reivewer table
     """
-    cursor.execute("""
-    SELECT CONCAT(first_name, '', last_name)
-    FROM reviewer
-    WHERE reviewer_id = {};
-    """.format(id))
-    result = cursor.fetchone()
-    if(len(result) == 0):
-        #step 2
-        create_reviewer(cursor)
-        return None
-        #check whether or not to continue to step 3 from 2 or not!
-    else:
-        #step 3
-        print("Hello {}.".format(result))
-        return get_film(cursor)
 
+    get_name = """
+        SELECT CONCAT(first_name, ' ', last_name)
+        FROM reviewer
+        WHERE reviewer_id = %s;
+        """
+
+    cursor.execute(get_name, [id])
+    result = cursor.fetchone()
+    if(result == None):
+        #step 2
+        create_reviewer(cnx, cursor, id)
+        cursor.execute(get_name,[id])
+        result = cursor.fetchone()
+    #the result is formmated as ('name', )
+    return result[0]
 
 def main():
     cnx = connect()
     cursor = cnx.cursor()
     if(not check_reviewer(cursor)):
-        create_reviewer_table(cursor)
+        create_reviewer_table(cnx, cursor)
     if(not check_rating(cursor)):
-        create_rating_table(cursor)
+        create_rating_table(cnx, cursor)
 
     #step one
-    id = input("Please enter your reviewer ID:")
-    check_id(cursor, id)
-    #remember to check behaviour when the rating is 2.333
+    id = input("Please enter your reviewer ID: ")
 
+    #step two inside
+    name = check_id(cnx, cursor, id)
+
+
+    #step 3
+    print("Hello {}.".format(name))
     film_id = get_film_id(cursor)
-    if(not film_id):
-        cursor.execute("""
-        INSERT INTO rating
-        VALUES 
-        """)
+    if(film_id != None):
+        # cursor.execute("""
+        # INSERT INTO rating
+        # VALUES 
+        # """)
+        print(film_id)
 
+    #remember to check behaviour when the rating is 2.333
 
     
 
@@ -170,4 +190,4 @@ def main_t():
     #get_film(cursor)
 
 if __name__ == '__main__':
-    main_t()
+    main()
