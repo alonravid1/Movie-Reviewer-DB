@@ -16,7 +16,7 @@ def connect():
 
 
 
-def check_reviewer(cursor):
+def check_reviewer_table(cursor):
     """
     check if the reviewer table exists
     """
@@ -26,7 +26,7 @@ def check_reviewer(cursor):
     result = cursor.fetchall()
     return (('reviewer', ) in result)
 
-def check_rating(cursor):
+def check_rating_table(cursor):
     """"
     check if the rating table exists
     """
@@ -36,6 +36,44 @@ def check_rating(cursor):
     result = cursor.fetchall()
     return (('rating', ) in result)
 
+def check_rating(rating):
+    """
+    check that the given rating is a valid input
+    return True if it is, False if not
+    """
+    try:
+        decimals = 0
+        splt_rating = str(rating).split(".")
+        if(len(splt_rating) == 2):
+            #check if the number has decimal digits
+            decimals = len(splt_rating[1])
+            
+        if(float(rating) < 0):
+            return False
+        if(float(rating) >= 10):
+            return False
+        if(decimals > 1):
+            return False
+        return True
+    except(Exception):
+        return False
+
+
+    
+
+def check_reviewer_id(reviewer_id):
+    """
+    check that the given id is a valid input
+    return True if it is, False if not
+    """
+    try:
+        if(int(reviewer_id) < 1):
+            return False
+        return True
+    except(Exception):
+        return False
+
+    
 
 def create_reviewer_table(cnx, cursor):
     """
@@ -49,8 +87,7 @@ def create_reviewer_table(cnx, cursor):
         last_name VARCHAR(45) NOT NULL
     );
     """)
-    #cnx.commit()
-
+    cnx.commit()
 
 def create_rating_table(cnx, cursor):
     """
@@ -58,18 +95,22 @@ def create_rating_table(cnx, cursor):
     """
     cursor.execute("""
         CREATE TABLE rating (
-            film_id SMALLINT NOT NULL,
+            film_id SMALLINT UNSIGNED NOT NULL,
             reviewer_id INT NOT NULL,
             rating DECIMAL(2,1) NOT NULL,
+            PRIMARY KEY(film_id, reviewer_id),
             FOREIGN KEY(film_id)
-                REFERENCES film (film_id),
-            FOREIGN KEY (reviewer_id)
-                REFERENCES reviewer (reviewer_id),
+                REFERENCES film(film_id)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE,
+            FOREIGN KEY(reviewer_id)
+                REFERENCES reviewer(reviewer_id)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE,
             CHECK (rating >= 0 AND rating < 10)
         );
         """)
-    #cnx.commit()
-    print("blah")
+    cnx.commit()
     
 def create_reviewer(cnx, cursor, id):
     """
@@ -86,13 +127,34 @@ def create_reviewer(cnx, cursor, id):
     cursor.execute(insert_reviewer, [id, first_name, last_name])
     cnx.commit()
 
-def add_review(cursor, film_id):
-    pass
+def add_review(cnx, cursor, film_id, reviewer_id):
+    """
+    recieves a film id, reviewer id and asks for a rating until
+    it recieves a valid one. It then adds the new rating to the
+    rating table, or updates an existing one if it exsists already.
+    """
+    rating = input("Please enter a rating from 0 to 9.9: ")
+ 
+    while (not check_rating(rating)):
+        rating = input("""Invalid rating, please enter a rating between 0 and 9.9,
+        with only one decimal digit: """)
+
+    insert_review = """
+        INSERT INTO rating
+        VALUES (%s, %s, %s)
+        ON DUPLICATE KEY
+            UPDATE rating = %s
+        """
+    cursor.execute(insert_review, [film_id, reviewer_id, rating, rating])
+    cnx.commit()
 
 def get_film_id(cursor):
     """
+    recieves a film name, returns it's ID if it exsits
+    and has only one release, otherwise prints all
+    releases and their IDs and asks the user to pick a specific id.
     """
-    film = input("Please enter a film name")
+    film = input("Please enter a film name: ")
 
     cursor.execute("""
         SELECT title, film_id, release_year
@@ -113,22 +175,29 @@ def get_film_id(cursor):
             result = cursor.fetchall()
 
         elif(len(result) == 1):
-            return result[0][0]
+            return result[0][1]
 
         else:
             print("Please select a film based on its ID from the following list:")
-            print(result)
+            for movie in result:
+                print("movie: {} | id: {} | release year: {}".format(movie[0], movie[1], movie[2]))
             film_id = input()
             for movie in result:
-                if(movie[0] == film_id):
-                    return film_id
+                try:
+                    if(int(movie[1]) == int(film_id)):
+                        return film_id
+                except ValueError:
+                    pass
             result = [] #sets result's length to 0
+
+
         
 
-def check_id(cnx, cursor, id):
+def auth_reviewer(cnx, cursor, id):
     """
     check if the given ID exists in the
-    reivewer table
+    reivewer table, create a new reviewer with
+    the givne id if not
     """
 
     get_name = """
@@ -150,44 +219,71 @@ def check_id(cnx, cursor, id):
 def main():
     cnx = connect()
     cursor = cnx.cursor()
-    if(not check_reviewer(cursor)):
+    if(not check_reviewer_table(cursor)):
         create_reviewer_table(cnx, cursor)
-    if(not check_rating(cursor)):
+    if(not check_rating_table(cursor)):
         create_rating_table(cnx, cursor)
 
     #step one
-    id = input("Please enter your reviewer ID: ")
+    reviewer_id = input("Please enter your reviewer ID: ")
+    while(not check_reviewer_id(reviewer_id)):
+        reviewer_id = input("Please enter a valid reviewer ID: ")
+   
+
 
     #step two inside
-    name = check_id(cnx, cursor, id)
+    name = auth_reviewer(cnx, cursor, reviewer_id)
 
 
     #step 3
     print("Hello {}.".format(name))
     film_id = get_film_id(cursor)
+
+    #step 4
     if(film_id != None):
-        # cursor.execute("""
-        # INSERT INTO rating
-        # VALUES 
-        # """)
-        print(film_id)
+       add_review(cnx, cursor, film_id, reviewer_id)
+
+    #step 5
+    i = 0
+    get_rating = """
+        SELECT f.title, CONCAT(rev.first_name, ' ', rev.last_name), rate.rating
+        FROM film f, reviewer rev, rating rate
+        WHERE rate.film_id = f.film_id
+            AND rev.reviewer_id = rate.reviewer_id
+        """
+    cursor.execute(get_rating)
+
+    #print up to 100 ratings
+    for rating in cursor:
+        print("movie: {} | reviewer: {} | rating: {}".format(rating[0], rating[1], rating[2]))
+        i += 1
+        if(i == 99):
+            break
+
 
     #remember to check behaviour when the rating is 2.333
-
-    
 
 
 def main_t():
     cnx = connect()
     cursor = cnx.cursor()
-    add_film = "INSERT INTO film (film_id, title, release_year, language_id ) VALUES (%s, %s, %s, %s)"
-    val2 = (2000, 'ACADEMY DINOSAUR', 2030, 1)
-    cursor.execute(add_film, val2)
-    cnx.commit()
-    cursor.execute("select * from film where title = 'ACADEMY DINOSAUR'")
-    test2 = cursor.fetchall()
-    print(test2)
-    #get_film(cursor)
+    
+    i = 0
+    get_rating = """
+        SELECT f.title, CONCAT(rev.first_name, ' ', rev.last_name), rate.rating
+        FROM film f, reviewer rev, rating rate
+        WHERE rate.film_id = f.film_id
+            AND rev.reviewer_id = rate.reviewer_id
+        """
+    cursor.execute(get_rating)
+    #for (q_title, q_name, q_rating) in cursor:
+        #print("".format(q_title, q_name, q_rating))
+    for rating in cursor:
+        print("movie: {} | reviewer: {} | rating: {}".format(rating[0], rating[1], rating[2]))
+        i += 1
+        if(i == 99):
+            break
+
 
 if __name__ == '__main__':
     main()
