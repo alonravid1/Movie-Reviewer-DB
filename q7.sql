@@ -1,3 +1,6 @@
+#assumed that dividing the date difference by 7 is ts
+#the expected representation of a time as weeks.
+#assumed accuracy up to days a
 SELECT
 	concat(cu.first_name, ' ', cu.last_name) as full_name,
     f.title,

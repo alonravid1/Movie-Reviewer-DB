@@ -1,7 +1,8 @@
-#, a.year, a.month, a.total_payment,
-#		b.store_id, b.year, b.month, b.total_payment
+#assumes that the first month of a year should be
+#checked against the last month of the previous year
 SELECT a.store_id, ABS(a.total_payment-b.total_payment) as earning_difference
 FROM (
+	#create two tables containing the store, year, month and total payments
 	SELECT st.store_id, YEAR(p.payment_date) as year, MONTH(p.payment_date) as month,
     SUM(p.amount) as total_payment
     FROM payment p, staff st

@@ -1,4 +1,4 @@
-SELECT c.first_name, c.last_name
+SELECT c.first_name as "first name", c.last_name as "last name"
 FROM customer c
 WHERE c.first_name NOT IN (
 	SELECT first_name

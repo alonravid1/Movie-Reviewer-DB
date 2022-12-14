@@ -111,14 +111,33 @@ def create_rating_table(cnx, cursor):
         );
         """)
     cnx.commit()
-    
+
+def check_name(name):
+    """
+    returns True if given a valid full name
+    False otherwise
+    """
+    try:
+        first_name, last_name = name.split(' ')
+        if(first_name.isalpha() and last_name.isalpha()):
+            return False
+        return True
+    except ValueError:
+        return True
+
+            
+
 def create_reviewer(cnx, cursor, id):
     """
     creates a new reviewer using the
     input id, and asking for first and
     last names.
     """
-    first_name, last_name = input("Enter first and last name: ").split(' ')
+    name = input("Enter first and last name: ")
+    while(check_name(name)):
+        name = input("Please enter a valid first and last name: ")
+
+    first_name, last_name = name.split(' ')
 
     insert_reviewer ="""
         INSERT INTO reviewer
@@ -213,7 +232,7 @@ def auth_reviewer(cnx, cursor, id):
         create_reviewer(cnx, cursor, id)
         cursor.execute(get_name,[id])
         result = cursor.fetchone()
-    #the result is formmated as ('name', )
+
     return result[0]
 
 def main():
@@ -254,30 +273,6 @@ def main():
     cursor.execute(get_rating)
 
     #print up to 100 ratings
-    for rating in cursor:
-        print("movie: {} | reviewer: {} | rating: {}".format(rating[0], rating[1], rating[2]))
-        i += 1
-        if(i == 99):
-            break
-
-
-    #remember to check behaviour when the rating is 2.333
-
-
-def main_t():
-    cnx = connect()
-    cursor = cnx.cursor()
-    
-    i = 0
-    get_rating = """
-        SELECT f.title, CONCAT(rev.first_name, ' ', rev.last_name), rate.rating
-        FROM film f, reviewer rev, rating rate
-        WHERE rate.film_id = f.film_id
-            AND rev.reviewer_id = rate.reviewer_id
-        """
-    cursor.execute(get_rating)
-    #for (q_title, q_name, q_rating) in cursor:
-        #print("".format(q_title, q_name, q_rating))
     for rating in cursor:
         print("movie: {} | reviewer: {} | rating: {}".format(rating[0], rating[1], rating[2]))
         i += 1
